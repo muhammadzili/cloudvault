@@ -1,0 +1,31 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Node
+node_modules
+dist
+dist-ssr
+
+# Build & Env
+.env
+.env.test
+.env.local
+.env.development
+.env.development.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database and Storage Files
+server/data/cloudvault.db
+server/uploads/*
+!server/uploads/.gitkeep
+server/data/*
+!server/data/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
