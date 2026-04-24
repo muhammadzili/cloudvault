@@ -147,7 +147,7 @@ const run = (sql, params = []) => {
 };
 
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: '*', // More permissive for production
   credentials: true
 }));
 app.use(express.json());
@@ -464,7 +464,9 @@ app.post('/api/settings', authenticate, (req, res) => {
 app.post('/api/settings/logo', authenticate, upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   
-  const logoUrl = `http://localhost:3001/uploads/${req.file.filename}`;
+  const host = req.get('host');
+  const protocol = req.protocol;
+  const logoUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
   
   const existing = queryOne("SELECT * FROM settings WHERE key = ?", ['logo_url']);
   if (existing) {
@@ -475,6 +477,21 @@ app.post('/api/settings/logo', authenticate, upload.single('logo'), (req, res) =
   
   res.json({ logo_url: logoUrl });
 });
+
+// -- Serve Frontend in Production --
+if (process.env.NODE_ENV === 'production') {
+  const __dirname = path.resolve();
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+
+  app.get('*', (req, res) => {
+    // Only serve index.html if it's not an API route and not a static file request that wasn't caught
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+    } else {
+      res.status(404).json({ error: 'Not Found' });
+    }
+  });
+}
 
 // -- Shared Pages Endpoints --
 

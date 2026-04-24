@@ -1,15 +1,15 @@
-# 🚀 Getting Started
+# Getting Started
 
 Welcome to **CloudVault**! This guide will help you set up your own personal cloud storage system on your server.
 
-## 📋 Prerequisites
+## Prerequisites
 
 - **Node.js**: v18.x or higher
 - **NPM**: v9.x or higher
 - **VPS/Server**: Linux recommended (Ubuntu/Debian)
 - **RAM**: Minimum 512MB
 
-## 🛠️ Installation
+## Installation
 
 ### 1. Clone & Core Setup
 ```bash
@@ -37,7 +37,7 @@ ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=your_secure_password
 ```
 
-## 🏃 Running the Application
+## Running the Application
 
 You can start both layers simultaneously from the root folder:
 ```bash

@@ -41,7 +41,7 @@ ADMIN_EMAIL=admin@cloudvault.local
 ADMIN_PASSWORD=SecurePass123!
 ```
 
-4. Start the application natively across all layers:
+4. Start the application in development mode:
 
 ```bash
 npm run dev
@@ -49,6 +49,27 @@ npm run dev
 
 CloudVault supports an underlying concurrent system that manages both the server and client builds on identical start up loops. Note that any SQLite migrations occur strictly on the backend instantiation process. 
 
+## Production Deployment
+
+To run CloudVault in a production environment, follow these steps:
+
+1. **Build and Start:**
+   Run the optimized production script which builds the frontend and starts the backend service:
+   ```bash
+   npm run prod
+   ```
+
+2. **Automated Startup (Recommended):**
+   Use a process manager like **PM2** to ensure the server restarts automatically:
+   ```bash
+   npm install -g pm2
+   pm2 start start-prod.sh --name cloudvault
+   ```
+
+3. **Reverse Proxy:**
+   It is highly recommended to use Nginx or Apache as a reverse proxy to handle SSL (HTTPS) and port forwarding.
+
 ## License
 
 This software is provided under the MIT License.
+

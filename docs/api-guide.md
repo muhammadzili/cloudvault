@@ -1,4 +1,4 @@
-# 🔌 API Documentation
+# API Documentation
 
 CloudVault provides a robust API for file management and integration.
 
@@ -11,17 +11,17 @@ Authorization: Bearer <your_jwt_or_api_token>
 
 ## Endpoints
 
-### 📁 Files
+### Files
 - `GET /api/files`: List all files (supports `folder_id` query).
 - `POST /api/files/upload`: Upload a single file (Multipart Form).
 - `POST /api/files/:id/share`: Toggle public sharing status.
 - `DELETE /api/files/:id`: Delete a file permanently.
 
-### 📂 Folders
+### Folders
 - `GET /api/folders`: List all folders.
 - `POST /api/folders`: Create a new folder.
 
-### 🔑 API Tokens
+### API Tokens
 Managed via the settings dashboard. These tokens can be used for automated uploads from scripts or CLI tools.
 
 ## Sharing Mechanics

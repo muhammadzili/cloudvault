@@ -1,4 +1,4 @@
-# 🛡️ Security Best Practices
+# Security Best Practices
 
 CloudVault is designed with security as a core principle. Here is how we protect your data:
 
