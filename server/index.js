@@ -97,7 +97,9 @@ const initDb = async () => {
     logo_url: '',
     description: 'Self-Hosted File Management System',
     meta_keys: 'files, storage, cloud',
-    seo_title: 'CloudVault'
+    seo_title: 'CloudVault',
+    max_file_size: '100', // MB
+    max_storage_size: '1024' // MB (1GB default), 0 = unlimited
   };
 
   for (const [key, value] of Object.entries(defaultSettings)) {
@@ -178,7 +180,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 104857600 }
+  limits: { fileSize: 10 * 1024 * 1024 * 1024 } // Hard limit 10GB for multer, we check dynamic limit in route
 });
 
 const authenticate = (req, res, next) => {
@@ -277,16 +279,39 @@ app.get('/api/files', authenticate, (req, res) => {
   res.json(files);
 });
 
-app.post('/api/files/upload', authenticate, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+app.post('/api/files/upload', authenticate, (req, res, next) => {
+  // Check dynamic file size limit from settings
+  const maxFileSetting = queryOne("SELECT value FROM settings WHERE key = 'max_file_size'");
+  const maxBytes = (parseInt(maxFileSetting?.value) || 100) * 1024 * 1024;
+  
+  multer({
+    storage,
+    limits: { fileSize: maxBytes }
+  }).single('file')(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const { folder_id } = req.body;
-  const result = run(
-    "INSERT INTO files (original_name, stored_name, path, size, mime_type, folder_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    [req.file.originalname, req.file.filename, req.file.path, req.file.size, req.file.mimetype, folder_id || null, req.user.id]
-  );
+    // Check total storage limit
+    const maxStorageSetting = queryOne("SELECT value FROM settings WHERE key = 'max_storage_size'");
+    const maxStorageBytes = (parseInt(maxStorageSetting?.value) || 0) * 1024 * 1024;
+    
+    if (maxStorageBytes > 0) {
+      const used = queryOne("SELECT SUM(size) as total FROM files");
+      const currentUsed = used?.total || 0;
+      if (currentUsed + req.file.size > maxStorageBytes) {
+        fs.unlinkSync(req.file.path);
+        return res.status(403).json({ error: 'Storage limit exceeded' });
+      }
+    }
 
-  res.json({ id: result.lastInsertRowid, original_name: req.file.originalname, size: req.file.size });
+    const { folder_id } = req.body;
+    const result = run(
+      "INSERT INTO files (original_name, stored_name, path, size, mime_type, folder_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [req.file.originalname, req.file.filename, req.file.path, req.file.size, req.file.mimetype, folder_id || null, req.user.id]
+    );
+
+    res.json({ id: result.lastInsertRowid, original_name: req.file.originalname, size: req.file.size });
+  });
 });
 
 app.get('/api/files/:id/download', authenticate, (req, res) => {
@@ -478,21 +503,6 @@ app.post('/api/settings/logo', authenticate, upload.single('logo'), (req, res) =
   res.json({ logo_url: logoUrl });
 });
 
-// -- Serve Frontend in Production --
-if (process.env.NODE_ENV === 'production') {
-  const __dirname = path.resolve();
-  app.use(express.static(path.join(__dirname, '../client/dist')));
-
-  app.get('*', (req, res) => {
-    // Only serve index.html if it's not an API route and not a static file request that wasn't caught
-    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
-      res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
-    } else {
-      res.status(404).json({ error: 'Not Found' });
-    }
-  });
-}
-
 // -- Shared Pages Endpoints --
 
 app.post('/api/files/:id/share', authenticate, (req, res) => {
@@ -529,6 +539,18 @@ app.get('/api/shared', (req, res) => {
   res.json({ files, settings });
 });
 
+app.get('/api/storage-info', authenticate, (req, res) => {
+  const used = queryOne("SELECT SUM(size) as total FROM files");
+  const maxStorageSetting = queryOne("SELECT value FROM settings WHERE key = 'max_storage_size'");
+  const maxFileSetting = queryOne("SELECT value FROM settings WHERE key = 'max_file_size'");
+  
+  res.json({
+    used: used?.total || 0,
+    max_storage: (parseInt(maxStorageSetting?.value) || 0) * 1024 * 1024,
+    max_file: (parseInt(maxFileSetting?.value) || 100) * 1024 * 1024
+  });
+});
+
 app.get('/api/shared/download/:id', (req, res) => {
   const { id } = req.params;
   const link = queryOne("SELECT file_id FROM shared_links WHERE file_id = ?", [id]);
@@ -541,6 +563,33 @@ app.get('/api/shared/download/:id', (req, res) => {
   res.download(file.path, file.original_name);
 });
 
+// -- Serve Frontend in Production --
+if (process.env.NODE_ENV === 'production') {
+  const __dirname = path.resolve();
+  app.use(express.static(path.join(__dirname, '../client/dist')));
+
+  app.get('*', (req, res) => {
+    // Only serve index.html if it's not an API route and not a static file request that wasn't caught
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(__dirname, '../client/dist', 'index.html'));
+    } else {
+      res.status(404).json({ error: 'Not Found' });
+    }
+  });
+}
+
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('SERVER ERROR:', err);
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File too large. Max size is ' + (process.env.MAX_FILE_SIZE || '100MB') });
+    }
+    return res.status(400).json({ error: err.message });
+  }
+  res.status(500).json({ error: err.message || 'Internal Server Error' });
+});
 
 initDb().then(() => {
   app.listen(PORT, () => {

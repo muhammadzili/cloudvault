@@ -29,7 +29,9 @@ export default function Settings() {
     logo_url: '',
     description: '',
     meta_keys: '',
-    seo_title: ''
+    seo_title: '',
+    max_file_size: '100',
+    max_storage_size: '1024'
   });
   const [savingSettings, setSavingSettings] = useState(false);
   const logoInputRef = useRef(null);
@@ -214,7 +216,7 @@ export default function Settings() {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Use your API token:</Typography>
                 <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#fff', fontFamily: 'monospace', fontSize: '0.875rem' }}>
                   <pre style={{ margin: 0 }}>{`curl -H "Authorization: Bearer YOUR_TOKEN" \\
-  http://localhost:3001/api/public/files`}</pre>
+  ${window.location.origin}/api/public/files`}</pre>
                 </Paper>
               </Paper>
             </>
@@ -242,7 +244,7 @@ export default function Settings() {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>GET /api/public/files (requires: read)</Typography>
                 <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: 'monospace', fontSize: '0.8rem', borderRadius: 1 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{`curl -H "Authorization: Bearer TOKEN" \\
-  http://localhost:3001/api/public/files
+  ${window.location.origin}/api/public/files
 
 # Response:
 # [{"id": 1, "original_name": "file.pdf", "size": 1024, ...}]
@@ -257,7 +259,7 @@ export default function Settings() {
                 <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: 'monospace', fontSize: '0.8rem', borderRadius: 1 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{`curl -X POST -H "Authorization: Bearer TOKEN" \\
   -F "file=@file.pdf" \\
-  http://localhost:3001/api/public/files/upload
+  ${window.location.origin}/api/public/files/upload
 
 # Response: {"id": 2, "original_name": "file.pdf"}`}</pre>
                 </Paper>
@@ -270,7 +272,7 @@ export default function Settings() {
                 <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: 'monospace', fontSize: '0.8rem', borderRadius: 1 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{`# Download file dengan ID 1
 curl -H "Authorization: Bearer TOKEN" \\
-  http://localhost:3001/api/public/files/1/download \\
+  ${window.location.origin}/api/public/files/1/download \\
   -o output.pdf
 
 # ID tidak ada? → 404 Not Found`}</pre>
@@ -282,7 +284,7 @@ curl -H "Authorization: Bearer TOKEN" \\
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>DELETE /api/public/files/<strong>:id</strong> (requires: delete)</Typography>
                 <Paper sx={{ p: 2, bgcolor: '#1e1e1e', color: '#d4d4d4', fontFamily: 'monospace', fontSize: '0.8rem', borderRadius: 1 }}>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{`curl -X DELETE -H "Authorization: Bearer TOKEN" \\
-  http://localhost:3001/api/public/files/1
+  ${window.location.origin}/api/public/files/1
 
 # ID tidak ada? → 404 Not Found`}</pre>
                 </Paper>
@@ -337,6 +339,33 @@ curl -H "Authorization: Bearer TOKEN" \\
                     multiline
                     rows={3}
                     helperText="Description of your site, injected into SEO meta tags and Shared Pages."
+                  />
+                </Box>
+              </Paper>
+
+              <Paper sx={{ p: 4, mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>System Limits</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Configure maximum limits for file uploads and total server storage.
+                </Typography>
+                
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  <TextField 
+                    label="Max File Size (MB)" 
+                    type="number"
+                    value={settingsForm.max_file_size} 
+                    onChange={e => setSettingsForm({...settingsForm, max_file_size: e.target.value})} 
+                    fullWidth 
+                    helperText="Maximum allowed size for a single file upload."
+                  />
+                  
+                  <TextField 
+                    label="Total Storage Limit (MB)" 
+                    type="number"
+                    value={settingsForm.max_storage_size} 
+                    onChange={e => setSettingsForm({...settingsForm, max_storage_size: e.target.value})} 
+                    fullWidth 
+                    helperText="Total storage allowed across all files. Set to 0 for unlimited."
                   />
                 </Box>
               </Paper>

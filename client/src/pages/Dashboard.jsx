@@ -1,11 +1,12 @@
 import { useState, useEffect, useContext, useRef } from 'react';
+import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
   AppBar, Toolbar, Typography, Button, IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Menu, MenuItem, Dialog, DialogTitle,
-  DialogContent, DialogActions, TextField, Breadcrumbs, Link, Chip
+  DialogContent, DialogActions, TextField, Breadcrumbs, Link, Chip, LinearProgress
 } from '@mui/material';
 import {
   Home, Folder, Description, Upload, Add, Settings as SettingsIcon, Logout, MoreVert,
@@ -45,16 +46,24 @@ export default function Dashboard() {
   const [shareLink, setShareLink] = useState('');
   
   const [brandName, setBrandName] = useState('CloudVault');
+  
+  const [storageInfo, setStorageInfo] = useState({ used: 0, max_storage: 0 });
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadingFile, setUploadingFile] = useState('');
+  const abortControllerRef = useRef(null);
 
   const loadData = async (folderId = null) => {
     const folderParams = folderId ? `?folder_id=${folderId}` : '';
-    const [foldersRes, filesRes, settingsRes] = await Promise.all([
+    const [foldersRes, filesRes, settingsRes, storageRes] = await Promise.all([
       api.get(`/folders${folderParams}`),
       api.get(`/files${folderParams}`),
-      api.get('/settings')
+      api.get('/settings'),
+      api.get('/storage-info')
     ]);
     setFolders(foldersRes.data);
     setFiles(filesRes.data);
+    setStorageInfo(storageRes.data);
     
     if (settingsRes.data && settingsRes.data.brand_name) {
       setBrandName(settingsRes.data.brand_name);
@@ -94,16 +103,49 @@ export default function Dashboard() {
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    setUploadingFile(file.name);
     const formData = new FormData();
     formData.append('file', file);
     if (currentFolder) formData.append('folder_id', currentFolder);
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    
+    abortControllerRef.current = new AbortController();
+
     try {
-      await api.post('/files/upload', formData);
+      await api.post('/files/upload', formData, {
+        signal: abortControllerRef.current.signal,
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        }
+      });
       await loadData(currentFolder);
+      setSnackMsg('Upload successful!');
+      setSnackOpen(true);
     } catch (err) {
-      alert('Upload failed');
+      if (axios.isCancel(err)) {
+        setSnackMsg('Upload cancelled');
+        setSnackOpen(true);
+      } else {
+        console.error(err);
+        alert(err.response?.data?.error || 'Upload failed');
+      }
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setUploadingFile('');
+      abortControllerRef.current = null;
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleCancelUpload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
   };
 
   const handleCreateFolder = async () => {
@@ -231,9 +273,31 @@ export default function Dashboard() {
             </ListItemButton>
           </ListItem>
         </List>
-        <Box sx={{ mt: 'auto', p: 2, mx: 1, mb: 1, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-          <Typography variant="caption" color="text.secondary">Logged in as</Typography>
-          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>{user?.email}</Typography>
+        
+        <Box sx={{ mt: 'auto', p: 2, mx: 1 }}>
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: '#fafafa', borderRadius: 1, border: '1px solid #eee' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 600 }}>Storage Usage</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {formatSize(storageInfo.used)} / {storageInfo.max_storage > 0 ? formatSize(storageInfo.max_storage) : 'Unlimited'}
+              </Typography>
+            </Box>
+            <LinearProgress 
+              variant="determinate" 
+              value={storageInfo.max_storage > 0 ? Math.min(100, (storageInfo.used / storageInfo.max_storage) * 100) : 0} 
+              sx={{ height: 6, borderRadius: 3, bgcolor: '#eee' }} 
+            />
+            {storageInfo.max_storage > 0 && (
+              <Typography variant="caption" sx={{ mt: 0.5, display: 'block', textAlign: 'right', fontSize: '0.7rem', color: (storageInfo.used / storageInfo.max_storage) > 0.9 ? 'error.main' : 'text.secondary' }}>
+                {Math.round((storageInfo.used / storageInfo.max_storage) * 100)}% used
+              </Typography>
+            )}
+          </Box>
+          
+          <Box sx={{ p: 1.5, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="caption" color="text.secondary">Logged in as</Typography>
+            <Typography variant="body2" sx={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>{user?.email}</Typography>
+          </Box>
         </Box>
       </Drawer>
 
@@ -342,6 +406,22 @@ export default function Dashboard() {
         <DialogTitle>Create Folder</DialogTitle>
         <DialogContent><TextField fullWidth value={folderName} onChange={(e) => setFolderName(e.target.value)} placeholder="Folder name" sx={{ mt: 1 }} /></DialogContent>
         <DialogActions><Button onClick={() => setFolderOpen(false)}>Cancel</Button><Button onClick={handleCreateFolder} variant="contained">Create</Button></DialogActions>
+      </Dialog>
+
+      <Dialog open={isUploading} disableEscapeKeyDown>
+        <DialogTitle sx={{ pb: 1 }}>Uploading File</DialogTitle>
+        <DialogContent sx={{ minWidth: 350, pt: 1 }}>
+          <Typography variant="body2" sx={{ mb: 2, fontWeight: 500, color: 'text.primary', wordBreak: 'break-all' }}>{uploadingFile}</Typography>
+          <Box sx={{ width: '100%', mb: 1 }}>
+            <LinearProgress variant="determinate" value={uploadProgress} sx={{ height: 8, borderRadius: 1 }} />
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography variant="caption" color="text.secondary">{uploadProgress}% complete</Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleCancelUpload} color="error" variant="outlined" size="small">Cancel Upload</Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar open={snackOpen} autoHideDuration={2000} onClose={() => setSnackOpen(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

@@ -36,7 +36,7 @@ function SharedPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await axios.get(`http://localhost:3001/api/shared`);
+        const response = await axios.get(`/api/shared`);
         setData(response.data);
         
         // Update SEO Meta Tags
@@ -71,7 +71,7 @@ function SharedPage() {
   }, []);
 
   const handleDownload = (id) => {
-    window.location.href = `http://localhost:3001/api/shared/download/${id}`;
+    window.location.href = `/api/shared/download/${id}`;
   };
 
   if (loading) {
