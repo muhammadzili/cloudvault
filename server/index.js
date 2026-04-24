@@ -26,6 +26,39 @@ ensureDir(path.dirname(DB_PATH));
 
 let db;
 
+const saveDb = () => {
+  if (!db) return;
+  const data = db.export();
+  const buffer = Buffer.from(data);
+  fs.writeFileSync(DB_PATH, buffer);
+};
+
+const query = (sql, params = []) => {
+  const stmt = db.prepare(sql);
+  // sql.js crashes if a parameter is undefined. Convert to null.
+  const safeParams = params.map(p => p === undefined ? null : p);
+  stmt.bind(safeParams);
+  const rows = [];
+  while(stmt.step()) {
+    rows.push(stmt.getAsObject());
+  }
+  stmt.free();
+  return rows;
+};
+
+const queryOne = (sql, params = []) => {
+  const results = query(sql, params);
+  return results[0] || null;
+};
+
+const run = (sql, params = []) => {
+  // sql.js crashes if a parameter is undefined. Convert to null.
+  const safeParams = params.map(p => p === undefined ? null : p);
+  db.run(sql, safeParams);
+  saveDb();
+  return { lastInsertRowid: db.exec("SELECT last_insert_rowid()")[0].values[0][0] };
+};
+
 const initDb = async () => {
   const SQL = await initSqlJs();
   
@@ -103,49 +136,24 @@ const initDb = async () => {
   };
 
   for (const [key, value] of Object.entries(defaultSettings)) {
-    const existing = db.exec("SELECT * FROM settings WHERE key = ?", [key]);
-    if (existing.length === 0 || existing[0].values.length === 0) {
-      db.run("INSERT INTO settings (key, value) VALUES (?, ?)", [key, value]);
+    const existing = queryOne("SELECT * FROM settings WHERE key = ?", [key]);
+    if (!existing) {
+      run("INSERT INTO settings (key, value) VALUES (?, ?)", [key, value]);
     }
   }
 
-  const adminCheck = db.exec("SELECT id FROM users WHERE email = ?", [process.env.ADMIN_EMAIL]);
-  if (adminCheck.length === 0 || adminCheck[0].values.length === 0) {
-    const hashed = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
-    db.run("INSERT INTO users (email, password, name) VALUES (?, ?, ?)", [process.env.ADMIN_EMAIL, hashed, 'Admin']);
-    console.log('✅ Admin user created:', process.env.ADMIN_EMAIL);
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@cloudvault.local';
+  const adminPassword = process.env.ADMIN_PASSWORD || 'SecurePass123!';
+
+  const adminCheck = queryOne("SELECT id FROM users WHERE email = ?", [adminEmail]);
+  if (!adminCheck) {
+    const hashed = bcrypt.hashSync(adminPassword, 10);
+    run("INSERT INTO users (email, password, name) VALUES (?, ?, ?)", [adminEmail, hashed, 'Admin']);
+    console.log('✅ Admin user created:', adminEmail);
   }
 
   saveDb();
   return db;
-};
-
-const saveDb = () => {
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
-};
-
-const query = (sql, params = []) => {
-  const stmt = db.prepare(sql);
-  stmt.bind(params);
-  const rows = [];
-  while(stmt.step()) {
-    rows.push(stmt.getAsObject());
-  }
-  stmt.free();
-  return rows;
-};
-
-const queryOne = (sql, params = []) => {
-  const results = query(sql, params);
-  return results[0] || null;
-};
-
-const run = (sql, params = []) => {
-  db.run(sql, params);
-  saveDb();
-  return { lastInsertRowid: db.exec("SELECT last_insert_rowid()")[0].values[0][0] };
 };
 
 app.use(cors({
